@@ -1,0 +1,146 @@
+import pygame
+import math
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+WIDTH = 800
+HEIGHT = 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Танчики")
+
+# Цвета
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+GRAY = (128, 128, 128)
+
+# Настройки танков
+TANK_SIZE = 30
+TANK_SPEED = 5
+ROTATION_SPEED = 3
+BULLET_SPEED = 10
+BULLET_SIZE = 8
+BULLET_COOLDOWN = 300  # ms
+
+# Класс Танка
+class Tank(pygame.sprite.Sprite):
+    def __init__(self, x, y, color, controls, rotation=0):
+        super().__init__()
+        self.original_image = pygame.Surface((TANK_SIZE, TANK_SIZE), pygame.SRCALPHA)
+        pygame.draw.polygon(self.original_image, color, [(0, TANK_SIZE), (TANK_SIZE, TANK_SIZE), (TANK_SIZE / 2, 0)])
+        self.image = self.original_image
+        self.rect = self.image.get_rect(center=(x, y))
+        self.rotation = rotation
+        self.speed = TANK_SPEED
+        self.controls = controls
+        self.last_shot_time = 0
+        self.color = color
+
+    def rotate(self, direction):
+        self.rotation += direction * ROTATION_SPEED
+        self.image = pygame.transform.rotate(self.original_image, -self.rotation)
+        self.rect = self.image.get_rect(center=self.rect.center)
+
+    def update(self, keys):
+        if keys[self.controls['left']]:
+            self.rotate(1)
+        if keys[self.controls['right']]:
+            self.rotate(-1)
+
+        dx = 0
+        dy = 0
+        rad = math.radians(self.rotation)
+        if keys[self.controls['up']]:
+            dx = math.cos(rad) * self.speed
+            dy = -math.sin(rad) * self.speed
+
+        new_rect = self.rect.move(dx, dy)
+        if new_rect.left >= 0 and new_rect.right <= WIDTH and new_rect.top >= 0 and new_rect.bottom <= HEIGHT:
+            self.rect = new_rect
+
+    def shoot(self, bullet_group):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_shot_time > BULLET_COOLDOWN:
+            rad = math.radians(self.rotation)
+            dx = math.cos(rad) * (TANK_SIZE // 2 + BULLET_SIZE // 2)
+            dy = -math.sin(rad) * (TANK_SIZE // 2 + BULLET_SIZE // 2)
+            bullet = Bullet(self.rect.centerx + dx, self.rect.centery + dy, rad, self.color)
+            bullet_group.add(bullet)
+            self.last_shot_time = current_time
+
+# Класс Снаряда
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, direction, color):
+        super().__init__()
+        self.image = pygame.Surface((BULLET_SIZE, BULLET_SIZE))
+        self.image.fill(color)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = BULLET_SPEED
+        self.dx = math.cos(direction) * self.speed
+        self.dy = -math.sin(direction) * self.speed
+
+    def update(self):
+        self.rect.x += self.dx
+        self.rect.y += self.dy
+        if not screen.get_rect().colliderect(self.rect):
+            self.kill()
+
+# Создание танков
+tank1_controls = {
+    'left': pygame.K_a,
+    'right': pygame.K_d,
+    'up': pygame.K_w,
+    'shoot': pygame.K_SPACE
+}
+tank2_controls = {
+    'left': pygame.K_LEFT,
+    'right': pygame.K_RIGHT,
+    'up': pygame.K_UP,
+    'shoot': pygame.K_RETURN
+}
+
+tank1 = Tank(WIDTH // 4, HEIGHT // 2, RED, tank1_controls, rotation=45)
+tank2 = Tank(WIDTH * 3 // 4, HEIGHT // 2, BLUE, tank2_controls, rotation=-135)
+
+all_sprites = pygame.sprite.Group()
+all_sprites.add(tank1, tank2)
+bullets = pygame.sprite.Group()
+
+# Основной игровой цикл
+clock = pygame.time.Clock()
+running = True
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == tank1_controls['shoot']:
+                tank1.shoot(bullets)
+            if event.key == tank2_controls['shoot']:
+                tank2.shoot(bullets)
+
+    keys = pygame.key.get_pressed()
+    tank1.update(keys)
+    tank2.update(keys)
+
+    bullets.update()
+    collisions = pygame.sprite.groupcollide(all_sprites, bullets, False, True)
+    if collisions:
+        for tank, bullet_list in collisions.items():
+            if tank == tank1:
+                print("Синий танк победил!")
+            else:
+                print("Красный танк победил!")
+            running = False
+
+    screen.fill(GRAY)
+    all_sprites.draw(screen)
+    bullets.draw(screen)
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
